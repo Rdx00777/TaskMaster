@@ -1,678 +1,338 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>RevTrack — PWA Revision Tracker</title>
-
-<!-- Tailwind CDN (quick dev) -->
-<script src="https://cdn.tailwindcss.com"></script>
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#071028" />
-
-<style>
-  :root{
-    --bg:#071028; --card:#0f1724; --muted:#93a4b8; --accent1:#06b6d4; --accent2:#10b981;
-  }
-  html,body{height:100%}
-  body {
-    margin:0; font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial;
-    background: linear-gradient(180deg,#071028,#020617);
-    color:#e6eef6; -webkit-font-smoothing:antialiased; padding-bottom:120px;
-  }
-  .card {
-    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-    border:1px solid rgba(255,255,255,0.03); border-radius:12px; padding:12px;
-    box-shadow: 0 8px 28px rgba(0,0,0,0.6);
-  }
-  .accent-rail { width:6px; background: linear-gradient(180deg,var(--accent2),var(--accent1)); border-radius:6px; margin-right:10px; }
-  .pbar{height:10px;background:#0b1220;border-radius:8px;overflow:hidden}
-  .pbar .fill{height:100%; background:linear-gradient(90deg,var(--accent2),var(--accent1)); width:0%; transition:width .6s;}
-  .circle{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.08);cursor:pointer}
-  .circle.done{background:linear-gradient(90deg,var(--accent2),var(--accent1));border:none}
-  .tiny{font-size:.82rem;color:var(--muted)}
-  .fab{position:fixed;right:18px;bottom:100px;width:56px;height:56px;border-radius:999px;background:linear-gradient(90deg,var(--accent2),var(--accent1));display:flex;align-items:center;justify-content:center;font-size:28px;color:#021117;z-index:60}
-  .bottom-nav{position:fixed;left:50%;transform:translateX(-50%);bottom:12px;width:96%;max-width:980px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:14px;padding:8px;border:1px solid rgba(255,255,255,0.03);display:flex;justify-content:space-between;align-items:center;z-index:50}
-  /* blackout overlay for Pomodoro */
-  #blackout { position:fixed; inset:0; background:#000; display:none; align-items:center; justify-content:center; z-index:2000; }
-  #blackout .timer { font-size:6.5rem; font-weight:700; color:#fff; letter-spacing:1px; }
-  @media (min-width:768px) { #blackout .timer { font-size:8rem } }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskMaster - Reminders & To-Dos</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+    </style>
 </head>
-<body>
+<body class="bg-slate-100 text-slate-800 min-h-screen font-sans selection:bg-indigo-100 selection:text-indigo-700">
 
-<main class="max-w-3xl mx-auto px-4 pt-6">
+    <div id="root"></div>
 
-  <!-- Header -->
-  <header class="flex items-center justify-between mb-4">
-    <div>
-      <div class="tiny">PWA Revision Tracker</div>
-      <h1 class="text-2xl font-bold">RevTrack — Mobile PWA</h1>
-    </div>
-    <div class="flex items-center gap-2">
-      <button id="exportBtn" class="tiny card">Export</button>
-      <button id="importBtn" class="tiny card">Import</button>
-    </div>
-  </header>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
 
-  <!-- subject tabs -->
-  <section class="flex gap-3 items-center mb-4">
-    <div id="tabs" class="flex gap-2">
-      <!-- tabs generated dynamically -->
-    </div>
-    <div class="flex-1"></div>
-    <button id="addSubjectBtn" class="tiny card">+ Subject</button>
-  </section>
-
-  <!-- Dashboard -->
-  <section id="dashboard" class="card mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div class="flex gap-4 items-center">
-      <div style="width:120px;height:120px;position:relative">
-        <canvas id="donut" width="120" height="120"></canvas>
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column">
-          <div id="donutPct" class="text-xl font-bold">0%</div>
-          <div class="tiny">Completed</div>
-        </div>
-      </div>
-      <div class="flex-1">
-        <div class="tiny mb-2">Progress (recent weeks)</div>
-        <canvas id="trend" height="120"></canvas>
-      </div>
-    </div>
-
-    <div>
-      <div class="flex items-center justify-between mb-2">
-        <div class="font-semibold">Overview</div>
-        <div class="tiny" id="overviewCount">0 / 0 topics</div>
-      </div>
-      <div id="sectionSummary" class="space-y-3 max-h-60 overflow-y-auto pr-2"></div>
-    </div>
-  </section>
-
-  <!-- Sections & Topics -->
-  <section id="sections" class="space-y-3"></section>
-
-</main>
-
-<!-- FAB -->
-<div class="fab" id="fabAdd" title="Add topic">＋</div>
-
-<!-- bottom nav -->
-<div class="bottom-nav">
-  <div class="flex gap-2">
-    <button id="btnDaily" class="tiny card">Daily</button>
-    <button id="btnWeekly" class="tiny card">Weekly</button>
-    <button id="btnMonthly" class="tiny card">Monthly</button>
-  </div>
-  <div class="flex gap-2">
-    <button id="btnSettings" class="tiny card">Settings</button>
-  </div>
-</div>
-
-<!-- Settings modal -->
-<div id="settings" class="fixed inset-0 hidden items-center justify-center z-40">
-  <div class="absolute inset-0 bg-black/60"></div>
-  <div class="relative w-full max-w-lg p-4">
-    <div class="card p-4">
-      <div class="flex items-center justify-between mb-3">
-        <div class="font-semibold">Settings</div>
-        <div>
-          <button id="closeSettings" class="tiny card">Close</button>
-        </div>
-      </div>
-
-      <div class="space-y-3">
-        <div>
-          <div class="font-medium tiny">Notifications</div>
-          <div class="tiny mt-2">Allow browser notifications for daily reminders.</div>
-          <div class="flex gap-2 mt-2">
-            <button id="allowNotify" class="tiny card">Enable</button>
-            <button id="disableNotify" class="tiny card">Disable</button>
-          </div>
-        </div>
-
-        <div>
-          <div class="font-medium tiny">Pomodoro</div>
-          <div class="flex items-center gap-2 mt-2">
-            <button id="startPom" class="tiny card">Start 25m</button>
-            <button id="stopPom" class="tiny card">Stop</button>
-            <div id="pomDisplay" class="tiny">00:00</div>
-          </div>
-        </div>
-
-        <div>
-          <div class="font-medium tiny">Options</div>
-          <label class="tiny"><input type="checkbox" id="optCycles" class="mr-2" checked> Enable auto revision cycles (R1/R2/R3)</label>
-          <label class="tiny"><input type="checkbox" id="optStreak" class="mr-2" checked> Enable streak counter</label>
-        </div>
-
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Note modal -->
-<div id="noteModal" class="fixed inset-0 hidden items-center justify-center z-50">
-  <div class="absolute inset-0 bg-black/60"></div>
-  <div class="relative w-full max-w-lg p-4">
-    <div class="card p-4">
-      <div class="flex items-center justify-between mb-3">
-        <div class="font-semibold" id="noteTitle">Notes</div>
-        <div>
-          <button id="saveNote" class="tiny card">Save</button>
-          <button id="closeNote" class="tiny card">Close</button>
-        </div>
-      </div>
-      <textarea id="noteEditor" class="note" placeholder="Type notes..."></textarea>
-    </div>
-  </div>
-</div>
-
-<!-- Blackout overlay for Pomodoro full-screen timer -->
-<div id="blackout">
-  <div class="timer-container text-center">
-    <div id="pomTimerBig" class="timer"></div>
-    <div class="tiny mt-2 muted">Tap anywhere to show controls (don't close tab)</div>
-  </div>
-</div>
-
-<script>
-/* ==================================================================================
-   RevTrack: Single-file logic (dynamic subjects, revision cycles, reminders, Pomodoro)
-   ==================================================================================
-   Notes:
-   - Data saved in localStorage namespaced by subject/section/topic
-   - Notifications: uses Notification API (request permission). Browser may restrict Notifications when PWA not installed or app closed.
-   - Pomodoro blackout: uses fullscreen-ish overlay and continuous beep (AudioContext oscillator); beep continues until Stop pressed.
-   - Service worker (sw.js) handles offline caching of shell. We register it below.
-   ================================================================================== */
-
-/* -----------------------
-   Utility helpers
-   ----------------------- */
-const el = id => document.getElementById(id);
-const nowISO = () => (new Date()).toISOString().slice(0,10);
-
-/* -----------------------
-   Example default subjects & topics (you can add/edit through UI)
-   ----------------------- */
-const DEFAULTS = {
-  anthropology: {
-    title: "Anthropology",
-    sections: [
-      { title: "Meaning, Scope, Development", topics:["Meaning of Anthropology","Scope & Branches","Historical development"] },
-      { title: "Research Methods", topics:["Fieldwork","Ethnography","Sampling & Methods"] },
-      { title: "Social Anthropology", topics:["Social structure","Kinship systems","Marriage patterns"] },
-      { title: "Economic Anthropology", topics:["Subsistence patterns","Production & Exchange","Economic institutions"] },
-      { title: "Political Anthropology", topics:["Leadership & Authority","Tribal politics","State formation"] },
-      { title: "Religion", topics:["Belief systems","Magic & Ritual","Religion & Society"] },
-      { title: "Anthropological Theories & Indian Anthropology", topics:["Evolutionism & Diffusionism","Indian anthropology overview","Applied anthropology"] }
-    ]
-  },
-  history: {
-    title: "History (Ancient & Modern)",
-    sections: [
-      { title:"Ancient India", topics:["Prehistoric cultures","Indus Valley (Harappan)","Early Vedic period","Later Vedic period","Mahajanapadas","Buddhism & Jainism","Mauryan Empire","Post-Mauryan polities","Gupta Age","Post-Gupta & regional kingdoms","South Indian kingdoms (Cholas, Cheras, Pandyas)"] },
-      { title:"Modern India", topics:["Advent of Europeans","British expansion","Impact of British rule","Social & Religious Reform Movements","Revolt of 1857","Moderate & Extremist phase","Gandhian phase","Revolutionary movements","Constitutional developments","India 1940–1947","Post-independence consolidation"] }
-    ]
-  }
-};
-
-/* -----------------------
-   Storage keys & helpers
-   ----------------------- */
-const STORE_KEY = "revtrack:v1:subjects";
-function loadSubjects(){ 
-  const s = localStorage.getItem(STORE_KEY);
-  if(!s){ localStorage.setItem(STORE_KEY, JSON.stringify(DEFAULTS)); return JSON.parse(JSON.stringify(DEFAULTS)); }
-  try{ return JSON.parse(s); } catch(e){ localStorage.setItem(STORE_KEY, JSON.stringify(DEFAULTS)); return JSON.parse(JSON.stringify(DEFAULTS)); }
-}
-function saveSubjects(obj){ localStorage.setItem(STORE_KEY, JSON.stringify(obj)); }
-
-/* per-topic keys */
-function keyDone(sub, si, ti){ return `rt:${sub}:s${si}:t${ti}:done`; }
-function keyNote(sub, si, ti){ return `rt:${sub}:s${si}:t${ti}:note`; }
-function keyDate(sub, si, ti){ return `rt:${sub}:s${si}:t${ti}:date`; } // user-set revision date
-function keyCycles(sub, si, ti){ return `rt:${sub}:s${si}:t${ti}:cycles`; } // {r1:true,r2:false,...}
-function keyReminders(){ return `rt:reminders`; } // reminders config
-
-/* state */
-let SUBJECTS = loadSubjects();
-let currentSubject = Object.keys(SUBJECTS)[0];
-let notifyEnabled = (localStorage.getItem('rt:notify') === 'true');
-let cyclesEnabled = (localStorage.getItem('rt:cycles') !== 'false'); // default true
-let streakEnabled = (localStorage.getItem('rt:streak') !== 'false'); // default true
-
-/* -----------------------
-   Render UI: tabs
-   ----------------------- */
-function renderTabs(){
-  const tabs = document.createElement('div');
-  tabs.id = 'tabs-inner';
-  Object.keys(SUBJECTS).forEach(key => {
-    const b = document.createElement('button');
-    b.className = 'chip card tiny px-3 py-2';
-    b.textContent = SUBJECTS[key].title;
-    b.onclick = () => { currentSubject = key; saveSubjects(SUBJECTS); renderAll(); }
-    if(key === currentSubject) b.style.boxShadow = '0 8px 28px rgba(6,182,212,0.08)';
-    tabs.appendChild(b);
-  });
-  const tabsContainer = document.getElementById('tabs');
-  tabsContainer.innerHTML = ''; tabsContainer.appendChild(tabs);
-}
-renderTabs();
-
-/* -----------------------
-   Render top charts + summary
-   ----------------------- */
-let donutChart = null, trendChart = null;
-function calcTotalsForSubject(subKey){
-  const model = SUBJECTS[subKey];
-  let total=0, done=0;
-  model.sections.forEach((sec, si)=> sec.topics.forEach((t, ti) => { total++; if(localStorage.getItem(keyDone(subKey,si,ti)) === 'true') done++; }));
-  return {total, done, pct: total? Math.round(done/total*100):0};
-}
-
-function renderTop(){
-  const totals = calcTotalsForSubject(currentSubject);
-  el('overviewCount').textContent = `${totals.done} / ${totals.total} topics`;
-  el('donutPct').textContent = `${totals.pct}%`;
-  // donut
-  const ctx = el('donut').getContext('2d');
-  if(donutChart) donutChart.destroy();
-  donutChart = new Chart(ctx, { type:'doughnut', data:{ labels:['Done','Pending'], datasets:[{ data:[totals.done, Math.max(0, totals.total-totals.done)], backgroundColor:['#10b981','#475569'] }] }, options:{ cutout:'78%', plugins:{legend:{display:false}} }});
-  // trend (mock)
-  const trend = generateTrend(totals.done, totals.total);
-  if(trendChart) trendChart.destroy();
-  trendChart = new Chart(el('trend').getContext('2d'), { type:'line', data:{ labels:trend.labels, datasets:[{ data:trend.data, tension:0.35, borderColor: '#06b6d4', backgroundColor:'rgba(6,182,212,0.08)', fill:true }] }, options:{ plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } } });
-
-  // section summary
-  const container = el('sectionSummary'); container.innerHTML = '';
-  SUBJECTS[currentSubject].sections.forEach((sec, si) => {
-    let secTotal = sec.topics.length, secDone=0;
-    sec.topics.forEach((t, ti) => { if(localStorage.getItem(keyDone(currentSubject,si,ti)) === 'true') secDone++; });
-    const pct = secTotal ? Math.round(secDone/secTotal*100) : 0;
-    const box = document.createElement('div');
-    box.className = 'flex items-center gap-3 card p-3';
-    box.innerHTML = `<div class="accent-rail" aria-hidden></div>
-      <div class="flex-1">
-        <div class="flex items-center justify-between mb-1"><div class="font-medium">${sec.title}</div><div class="tiny">${pct}%</div></div>
-        <div class="pbar"><div class="fill" style="width:${pct}%"></div></div>
-      </div>
-      <div class="tiny">${secDone}/${secTotal}</div>`;
-    container.appendChild(box);
-  });
-}
-
-/* -----------------------
-   Render sections & topics
-   ----------------------- */
-function renderSections(){
-  const sectionsContainer = el('sections'); sectionsContainer.innerHTML = '';
-  SUBJECTS[currentSubject].sections.forEach((sec, si) => {
-    const secCard = document.createElement('div'); secCard.className = 'card p-3';
-    secCard.innerHTML = `<div class="flex items-center justify-between mb-3"><div class="flex items-center gap-3"><div style="width:6px;height:40px;border-radius:6px;background:linear-gradient(180deg,var(--accent2),var(--accent1))"></div><div><div class="font-semibold">${sec.title}</div><div class="tiny">${sec.topics.length} topics</div></div></div></div><div id="sec-${si}" class="space-y-3"></div>`;
-    sectionsContainer.appendChild(secCard);
-    const listEl = secCard.querySelector(`#sec-${si}`);
-    sec.topics.forEach((topic, ti) => {
-      const done = localStorage.getItem(keyDone(currentSubject,si,ti)) === 'true';
-      const note = localStorage.getItem(keyNote(currentSubject,si,ti)) || '';
-      const date = localStorage.getItem(keyDate(currentSubject,si,ti)) || '';
-      const cycles = JSON.parse(localStorage.getItem(keyCycles(currentSubject,si,ti) || '{}') || '{}');
-
-      const row = document.createElement('div');
-      row.className = 'flex items-center justify-between gap-3';
-      row.innerHTML = `
-        <div class="flex items-start gap-3">
-          <div style="width:4px;height:56px;border-radius:6px;background:linear-gradient(180deg,var(--accent2),var(--accent1));margin-top:6px"></div>
-          <div class="flex-1">
-            <div class="font-medium">${topic}</div>
-            <div class="tiny">${note ? note.slice(0,90) : 'No notes'}</div>
-            <div class="flex items-center gap-3 mt-2">
-              <div class="pbar"><div class="fill" style="width:${done?100:0}%"></div></div>
-              <input type="date" class="tiny card px-2 py-1" value="${date}" data-si="${si}" data-ti="${ti}" data-role="date"/>
+        // Notification Component
+        const NotificationToast = ({ message, onClose }) => (
+            <div className="fixed top-4 right-4 z-50 animate-bounce-in">
+                <div className="bg-indigo-600 text-white px-6 py-4 rounded-lg shadow-xl flex items-center gap-3 max-w-xs md:max-w-md">
+                    <i data-lucide="bell-ring" className="w-6 h-6 animate-pulse"></i>
+                    <div>
+                        <h4 className="font-bold text-sm uppercase tracking-wide">Reminder</h4>
+                        <p className="text-sm font-medium">{message}</p>
+                    </div>
+                    <button onClick={onClose} className="ml-auto hover:bg-indigo-700 p-1 rounded">
+                        <i data-lucide="x" className="w-4 h-4"></i>
+                    </button>
+                </div>
             </div>
-          </div>
-        </div>
-        <div class="flex flex-col items-center gap-2">
-          <div class="circle ${done ? 'done' : ''}" data-si="${si}" data-ti="${ti}">${done? '✓' : ''}</div>
-          <button class="tiny open-note" data-si="${si}" data-ti="${ti}">Notes</button>
-          <div class="rev-cycles mt-2 tiny">
-            <label><input type="checkbox" class="c-r1" data-si="${si}" data-ti="${ti}" ${cycles.r1? 'checked' : ''}/>R1</label>
-            <label><input type="checkbox" class="c-r2" data-si="${si}" data-ti="${ti}" ${cycles.r2? 'checked' : ''}/>R2</label>
-            <label><input type="checkbox" class="c-r3" data-si="${si}" data-ti="${ti}" ${cycles.r3? 'checked' : ''}/>R3</label>
-          </div>
-        </div>
-      `;
-      listEl.appendChild(row);
+        );
 
-      // event handlers
-      row.querySelector('.circle').addEventListener('click', ()=> {
-        const key = keyDone(currentSubject, si, ti);
-        const newv = !(localStorage.getItem(key) === 'true');
-        localStorage.setItem(key, newv ? 'true' : 'false');
-        if(newv && streakEnabled) creditStreak();
-        if(cyclesEnabled) autoScheduleCycles(currentSubject, si, ti); // schedule next cycle automatically
-        renderAll();
-      });
+        const App = () => {
+            // State
+            const [tasks, setTasks] = useState(() => {
+                const saved = localStorage.getItem('github-todo-tasks');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [inputValue, setInputValue] = useState('');
+            const [dateValue, setDateValue] = useState('');
+            const [activeNotification, setActiveNotification] = useState(null);
+            const audioRef = useRef(null);
 
-      row.querySelector('.open-note').addEventListener('click', ()=> {
-        openNoteModal(currentSubject, si, ti, topic);
-      });
+            // Load Lucide icons whenever DOM updates
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
 
-      // date picker change
-      row.querySelector('input[type=date]').addEventListener('change', (e)=>{
-        const val = e.target.value;
-        if(val) localStorage.setItem(keyDate(currentSubject,si,ti), val); else localStorage.removeItem(keyDate(currentSubject,si,ti));
-        scheduleReminderForDate(currentSubject, si, ti, val);
-      });
+            // Save to local storage
+            useEffect(() => {
+                localStorage.setItem('github-todo-tasks', JSON.stringify(tasks));
+            }, [tasks]);
 
-      // cycle checkboxes
-      ['r1','r2','r3'].forEach(r=>{
-        const cb = row.querySelector('.c-'+r);
-        cb.addEventListener('change', ()=>{
-          const cd = { r1: !!row.querySelector('.c-r1').checked, r2: !!row.querySelector('.c-r2').checked, r3: !!row.querySelector('.c-r3').checked };
-          localStorage.setItem(keyCycles(currentSubject,si,ti), JSON.stringify(cd));
-        });
-      });
-    });
-  });
-}
+            // Check for reminders every 5 seconds
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    const now = new Date();
+                    tasks.forEach(task => {
+                        if (task.reminder && !task.completed && !task.notified) {
+                            const taskDate = new Date(task.reminder);
+                            // If current time is past reminder time (within a 1 minute window to prevent old spam)
+                            if (now >= taskDate && (now - taskDate) < 60000) {
+                                triggerNotification(task);
+                            }
+                        }
+                    });
+                }, 5000);
 
-/* -----------------------
-   Notes modal
-   ----------------------- */
-function openNoteModal(sub, si, ti, topicTitle){
-  el('noteTitle').textContent = topicTitle;
-  el('noteEditor').value = localStorage.getItem(keyNote(sub,si,ti)) || '';
-  el('noteModal').classList.remove('hidden'); el('noteModal').classList.add('flex');
-  el('saveNote').onclick = ()=> {
-    const v = el('noteEditor').value.trim();
-    if(v) localStorage.setItem(keyNote(sub,si,ti), v); else localStorage.removeItem(keyNote(sub,si,ti));
-    el('noteModal').classList.add('hidden');
-    renderAll();
-  };
-  el('closeNote').onclick = ()=> { el('noteModal').classList.add('hidden'); };
-}
+                return () => clearInterval(interval);
+            }, [tasks]);
 
-/* -----------------------
-   Automatic revision cycles scheduler (basic)
-   - When a topic is marked done it auto-programs the next revision dates for R1 (1 day), R2 (7 days), R3 (30 days)
-   - Stores cycles in keyCycles
-   ----------------------- */
-function autoScheduleCycles(sub, si, ti){
-  if(!cyclesEnabled) return;
-  const today = new Date();
-  const addDays = (d, days)=> { const n = new Date(d); n.setDate(n.getDate()+days); return n.toISOString().slice(0,10); };
-  const r1 = addDays(today, 1);
-  const r2 = addDays(today, 7);
-  const r3 = addDays(today, 30);
-  // set reminder dates in localStorage as keyDate for user convenience (keeps one date shown in UI)
-  localStorage.setItem(keyDate(sub, si, ti), r1);
-  localStorage.setItem(keyCycles(sub, si, ti), JSON.stringify({r1:true,r2:false,r3:false}));
-  // schedule notification/tracking
-  scheduleReminderForDate(sub, si, ti, r1);
-  scheduleReminderForDate(sub, si, ti, r2);
-  scheduleReminderForDate(sub, si, ti, r3);
-}
+            // Request browser notification permission on load
+            useEffect(() => {
+                if ("Notification" in window) {
+                    Notification.requestPermission();
+                }
+            }, []);
 
-/* -----------------------
-   Reminders scheduling & checking
-   - We keep a reminder list in localStorage with items {sub,si,ti,date}
-   - A page timer checks every minute to show notifications if due (works while page is open / PWA installed and active)
-   - Service worker cannot reliably schedule arbitrary alarms across all browsers — this is a best-effort local scheduling system.
-   ----------------------- */
-function pushReminder(sub, si, ti, dateStr){
-  const list = JSON.parse(localStorage.getItem(keyReminders()) || '[]');
-  list.push({sub, si, ti, date: dateStr});
-  localStorage.setItem(keyReminders(), JSON.stringify(list));
-}
+            const triggerNotification = (task) => {
+                // 1. In-App Toast
+                setActiveNotification(task.text);
+                
+                // 2. Play Sound (gentle beep)
+                if(audioRef.current) {
+                    audioRef.current.play().catch(e => console.log("Audio play failed", e));
+                }
 
-function removeRemindersFor(sub, si, ti){
-  const list = JSON.parse(localStorage.getItem(keyReminders()) || '[]').filter(r => !(r.sub===sub && r.si===si && r.ti===ti));
-  localStorage.setItem(keyReminders(), JSON.stringify(list));
-}
+                // 3. Mark as notified so it doesn't ring again
+                const updatedTasks = tasks.map(t => 
+                    t.id === task.id ? { ...t, notified: true } : t
+                );
+                setTasks(updatedTasks);
 
-function scheduleReminderForDate(sub, si, ti, dateStr){
-  // remove existing for topic then add new
-  removeRemindersFor(sub, si, ti);
-  if(dateStr) pushReminder(sub, si, ti, dateStr);
-}
+                // 4. Browser Notification (if outside tab)
+                if ("Notification" in window && Notification.permission === "granted") {
+                    new Notification("Task Reminder", {
+                        body: task.text,
+                        icon: "https://cdn-icons-png.flaticon.com/512/7322/7322187.png" 
+                    });
+                }
+            };
 
-/* check reminders once per minute */
-setInterval(()=> {
-  if(!notifyEnabled) return;
-  const list = JSON.parse(localStorage.getItem(keyReminders()) || '[]');
-  if(!list.length) return;
-  const today = new Date().toISOString().slice(0,10);
-  // check matches for today
-  const ready = list.filter(r => r.date === today);
-  ready.forEach(r => {
-    showNotification(`Revision: ${SUBJECTS[r.sub].sections[r.si].topics[r.ti]}`, { body: `Scheduled for today — ${SUBJECTS[r.sub].title}`, tag: `rt-${r.sub}-${r.si}-${r.ti}-${r.date}` });
-    // remove this reminder after notifying once
-    removeRemindersFor(r.sub, r.si, r.ti);
-  });
-}, 60*1000); // every minute
+            const addTask = (e) => {
+                e.preventDefault();
+                if (!inputValue.trim()) return;
 
-/* showNotification (uses ServiceWorker if available for consistent display) */
-async function showNotification(title, options){
-  if('serviceWorker' in navigator && navigator.serviceWorker.controller){
-    try {
-      const reg = await navigator.serviceWorker.getRegistration();
-      if(reg && reg.showNotification) { reg.showNotification(title, options); return; }
-    } catch(e){}
-  }
-  // fallback to Notification API
-  try { new Notification(title, options); } catch(e){}
-}
+                const newTask = {
+                    id: Date.now(),
+                    text: inputValue,
+                    completed: false,
+                    reminder: dateValue ? new Date(dateValue).toISOString() : null,
+                    notified: false,
+                    createdAt: new Date().toISOString()
+                };
 
-/* request permission helper */
-async function requestNotificationPermission(){
-  if(!('Notification' in window)) return false;
-  const p = await Notification.requestPermission();
-  notifyEnabled = (p === 'granted');
-  localStorage.setItem('rt:notify', notifyEnabled ? 'true' : 'false');
-  return notifyEnabled;
-}
+                setTasks([newTask, ...tasks]);
+                setInputValue('');
+                setDateValue('');
+            };
 
-/* -----------------------
-   Pomodoro (blackout + beep)
-   - pressing start blackouts, shows big timer, and beeps continuously until stopped
-   - uses Web Audio API oscillator to generate a beeping tone repeated until stop
-   ----------------------- */
-let pomInterval = null, pomRemaining = 25*60;
-let audioCtx = null, oscillator = null, beeperInterval = null;
+            const toggleTask = (id) => {
+                setTasks(tasks.map(task => 
+                    task.id === id ? { ...task, completed: !task.completed } : task
+                ));
+            };
 
-function startPomodoro(minutes=25){
-  // enter blackout
-  el('blackout').style.display = 'flex';
-  pomRemaining = Math.max(1, Math.floor(minutes*60));
-  updatePomDisplay();
-  // create audio context & oscillator for continuous beep pattern (short beep repeated)
-  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  // define beeper function: beep 300ms every 800ms
-  function startBeeper(){
-    beeperInterval = setInterval(()=> {
-      oscillator = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = 880;
-      oscillator.connect(gain);
-      gain.connect(audioCtx.destination);
-      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.01);
-      oscillator.start();
-      setTimeout(()=> {
-        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
-        try{ oscillator.stop(); } catch(e){}
-      }, 300);
-    }, 800);
-  }
-  // Start beeper (requires user gesture in most browsers; calling from button click is OK)
-  startBeeper();
+            const deleteTask = (id) => {
+                setTasks(tasks.filter(task => task.id !== id));
+            };
 
-  // tick countdown
-  clearInterval(pomInterval);
-  pomInterval = setInterval(()=> {
-    pomRemaining--;
-    updatePomDisplay();
-    if(pomRemaining <= 0){
-      stopPomodoro(true);
-      // final long alert
-      showNotification('Pomodoro finished','{body:"Time up"}');
-      alert('Pomodoro finished — take a break!');
-    }
-  }, 1000);
+            const formatFriendlyDate = (dateString) => {
+                if (!dateString) return '';
+                const date = new Date(dateString);
+                return date.toLocaleString('en-US', { 
+                    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' 
+                });
+            };
 
-  // show big timer update while blackout
-  el('blackout').onclick = ()=> { /* reveal controls: just hide overlay but continue timer */ el('blackout').style.display = 'none'; };
-}
+            // Sort tasks: Pending first, then Completed. Within Pending: Soonest reminder first.
+            const sortedTasks = [...tasks].sort((a, b) => {
+                if (a.completed === b.completed) {
+                    if (!a.reminder && !b.reminder) return b.id - a.id;
+                    if (!a.reminder) return 1;
+                    if (!b.reminder) return -1;
+                    return new Date(a.reminder) - new Date(b.reminder);
+                }
+                return a.completed ? 1 : -1;
+            });
 
-// stop pomodoro and cease beeping
-function stopPomodoro(userStopped=false){
-  if(pomInterval) clearInterval(pomInterval);
-  pomInterval = null;
-  pomRemaining = 25*60;
-  updatePomDisplay();
-  // stop beeper
-  if(beeperInterval) { clearInterval(beeperInterval); beeperInterval = null; }
-  if(oscillator){ try{ oscillator.stop(); }catch(e){} oscillator=null; }
-  // hide blackout if visible
-  el('blackout').style.display = 'none';
-}
+            const stats = {
+                total: tasks.length,
+                completed: tasks.filter(t => t.completed).length,
+                pending: tasks.filter(t => !t.completed).length
+            };
 
-/* helper to format timer */
-function updatePomDisplay(){
-  const mm = String(Math.floor(pomRemaining/60)).padStart(2,'0');
-  const ss = String(pomRemaining%60).padStart(2,'0');
-  el('pomDisplay').textContent = `${mm}:${ss}`;
-  const big = document.getElementById('pomTimerBig');
-  if(big) big.textContent = `${mm}:${ss}`;
-}
+            const progress = stats.total === 0 ? 0 : (stats.completed / stats.total) * 100;
 
-/* -----------------------
-   Streak credit (simple)
-   ----------------------- */
-function creditStreak(){
-  if(!streakEnabled) return;
-  const store = JSON.parse(localStorage.getItem('rt:streak') || '{"last":"", "count":0}');
-  const today = nowISO();
-  if(store.last === today) return;
-  store.last = today; store.count = (store.count||0)+1;
-  localStorage.setItem('rt:streak', JSON.stringify(store));
-}
+            return (
+                <div className="max-w-2xl mx-auto p-4 md:p-8">
+                    {/* Hidden Audio for Alerts */}
+                    <audio ref={audioRef} src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
 
-/* -----------------------
-   Trend generator (dummy)
-   ----------------------- */
-function generateTrend(done, total){
-  const weeks = 6; const labels = []; const data = [];
-  for(let i=weeks;i>0;i--){ labels.push('W-'+i); data.push(Math.round(Math.max(0, (total?done/total:0)*5) * Math.random())); }
-  return {labels,data};
-}
+                    {activeNotification && (
+                        <NotificationToast 
+                            message={activeNotification} 
+                            onClose={() => setActiveNotification(null)} 
+                        />
+                    )}
 
-/* -----------------------
-   Export / Import functions
-   ----------------------- */
-el('exportBtn').addEventListener('click', ()=> {
-  const payload = { subjects: SUBJECTS, reminders: JSON.parse(localStorage.getItem(keyReminders()) || '[]') };
-  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'revtrack-backup.json'; document.body.appendChild(a); a.click(); a.remove();
-});
+                    {/* Header Section */}
+                    <header className="mb-8">
+                        <div className="flex justify-between items-end mb-4">
+                            <div>
+                                <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">
+                                    TaskFlow
+                                </h1>
+                                <p className="text-slate-500 mt-1">Manage your day, effectively.</p>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-sm font-semibold text-slate-600">
+                                    {stats.completed}/{stats.total} Done
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full bg-indigo-500 transition-all duration-500 ease-out"
+                                style={{ width: `${progress}%` }}
+                            ></div>
+                        </div>
+                    </header>
 
-el('importBtn').addEventListener('click', ()=> {
-  const input = document.createElement('input'); input.type = 'file'; input.accept='application/json';
-  input.onchange = e => {
-    const f = e.target.files[0]; if(!f) return;
-    const reader = new FileReader(); reader.onload = ()=> {
-      try {
-        const parsed = JSON.parse(reader.result);
-        if(parsed.subjects) { SUBJECTS = parsed.subjects; saveSubjects(SUBJECTS); renderAll(); alert('Import complete'); }
-        if(parsed.reminders) localStorage.setItem(keyReminders(), JSON.stringify(parsed.reminders));
-      } catch(err){ alert('Import failed'); }
-    }; reader.readAsText(f);
-  }; input.click();
-});
+                    {/* Input Section */}
+                    <div className="glass-panel p-6 rounded-2xl shadow-lg border border-white mb-8">
+                        <form onSubmit={addTask} className="flex flex-col gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Task Name</label>
+                                <input
+                                    type="text"
+                                    value={inputValue}
+                                    onChange={(e) => setInputValue(e.target.value)}
+                                    placeholder="What needs to be done?"
+                                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 text-lg rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent block p-4 transition-all placeholder:text-slate-400"
+                                />
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <div className="flex-1">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Set Reminder (Optional)</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={dateValue}
+                                        onChange={(e) => setDateValue(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent block p-3"
+                                    />
+                                </div>
+                                <div className="flex items-end">
+                                    <button 
+                                        type="submit" 
+                                        disabled={!inputValue.trim()}
+                                        className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-xl transition-colors flex items-center gap-2 shadow-lg shadow-indigo-200"
+                                    >
+                                        <i data-lucide="plus" className="w-5 h-5"></i>
+                                        <span className="hidden md:inline">Add Task</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
 
-/* -----------------------
-   Add subject & topic UI
-   ----------------------- */
-el('addSubjectBtn').addEventListener('click', ()=> {
-  const name = prompt('Subject key (short, like "gs1")'); if(!name) return;
-  const title = prompt('Subject title (display)'); if(!title) return;
-  SUBJECTS[name] = { title, sections: [{ title: 'Default', topics: [] }] };
-  saveSubjects(SUBJECTS); renderTabs(); renderAll();
-});
+                    {/* Tasks List */}
+                    <div className="space-y-3">
+                        {tasks.length === 0 && (
+                            <div className="text-center py-12 opacity-50">
+                                <div className="bg-slate-200 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <i data-lucide="check-circle-2" className="w-8 h-8 text-slate-400"></i>
+                                </div>
+                                <p className="text-lg font-medium text-slate-600">All caught up!</p>
+                                <p className="text-sm text-slate-500">Add a task above to get started.</p>
+                            </div>
+                        )}
 
-el('fabAdd').addEventListener('click', ()=> {
-  const sub = currentSubject;
-  const sections = SUBJECTS[sub].sections;
-  if(!sections.length) { alert('No section to add to'); return; }
-  const title = prompt('Enter topic title'); if(!title) return;
-  sections[0].topics.push(title);
-  saveSubjects(SUBJECTS); renderAll();
-});
+                        {sortedTasks.map(task => {
+                            const isOverdue = task.reminder && new Date(task.reminder) < new Date() && !task.completed;
+                            
+                            return (
+                                <div 
+                                    key={task.id}
+                                    className={`group relative p-4 rounded-xl border transition-all duration-200 hover:shadow-md ${
+                                        task.completed 
+                                            ? 'bg-slate-50 border-slate-100 opacity-60' 
+                                            : 'bg-white border-slate-200'
+                                    } ${isOverdue ? 'border-l-4 border-l-red-400' : ''}`}
+                                >
+                                    <div className="flex items-start gap-4">
+                                        <button
+                                            onClick={() => toggleTask(task.id)}
+                                            className={`mt-1 flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
+                                                task.completed
+                                                    ? 'bg-green-500 border-green-500 text-white'
+                                                    : 'border-slate-300 hover:border-indigo-500 text-transparent'
+                                            }`}
+                                        >
+                                            <i data-lucide="check" className="w-3 h-3 stroke-[4]"></i>
+                                        </button>
 
-/* -----------------------
-   Settings handlers
-   ----------------------- */
-el('btnSettings').addEventListener('click', ()=> { el('settings').classList.remove('hidden'); el('settings').classList.add('flex'); });
-el('closeSettings').addEventListener('click', ()=> { el('settings').classList.add('hidden'); });
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`text-lg font-medium break-words ${
+                                                task.completed ? 'line-through text-slate-400' : 'text-slate-800'
+                                            }`}>
+                                                {task.text}
+                                            </p>
+                                            
+                                            {task.reminder && (
+                                                <div className={`flex items-center gap-1 text-xs mt-1 font-medium ${
+                                                    isOverdue ? 'text-red-500' : 'text-indigo-500'
+                                                }`}>
+                                                    <i data-lucide="clock" className="w-3 h-3"></i>
+                                                    {formatFriendlyDate(task.reminder)}
+                                                    {isOverdue && <span className="bg-red-100 text-red-600 px-1.5 py-0.5 rounded text-[10px] ml-2">OVERDUE</span>}
+                                                </div>
+                                            )}
+                                        </div>
 
-el('allowNotify').addEventListener('click', async ()=> {
-  const ok = await requestNotificationPermission();
-  if(ok) alert('Notifications enabled'); else alert('Notifications blocked');
-});
+                                        <button 
+                                            onClick={() => deleteTask(task.id)}
+                                            className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                            aria-label="Delete task"
+                                        >
+                                            <i data-lucide="trash-2" className="w-5 h-5"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    
+                    <footer className="mt-12 text-center text-slate-400 text-sm">
+                        <p>Data is saved automatically to your browser.</p>
+                    </footer>
+                </div>
+            );
+        };
 
-el('disableNotify').addEventListener('click', ()=> {
-  notifyEnabled = false; localStorage.setItem('rt:notify', 'false'); alert('Notifications disabled');
-});
-
-el('startPom').addEventListener('click', ()=> {
-  // must be user gesture to start AudioContext in most browsers
-  startPomodoro(25);
-});
-el('stopPom').addEventListener('click', ()=> {
-  stopPomodoro(true);
-});
-
-/* -----------------------
-   Remind-on-load: pick up saved dates and populate reminders
-   ----------------------- */
-function loadSavedReminders(){
-  const list = [];
-  Object.keys(SUBJECTS).forEach(sub => {
-    SUBJECTS[sub].sections.forEach((sec, si) => sec.topics.forEach((t, ti) => {
-      const d = localStorage.getItem(keyDate(sub,si,ti));
-      if(d) list.push({sub,si,ti,date:d});
-    }));
-  });
-  localStorage.setItem(keyReminders(), JSON.stringify(list));
-}
-loadSavedReminders(); // ensure reminders list exists
-
-/* -----------------------
-   Schedule handler (run at startup)
-   ----------------------- */
-(async function init(){
-  renderTabs(); renderAll();
-  // register service worker
-  if('serviceWorker' in navigator){
-    try { await navigator.serviceWorker.register('sw.js'); console.log('sw registered'); } catch(e){ console.warn('sw failed', e); }
-  }
-  // show permission prompt if user earlier allowed
-  if(localStorage.getItem('rt:notify') === 'true') requestNotificationPermission();
-})();
-
-/* helper to render everything */
-function renderAll(){ renderTabs(); renderTop(); renderSections(); }
-
-/* scheduleReminderForDate wrapper: when user sets date we already track them via list above. */
-/* End of app logic */
-</script>
-
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
+
